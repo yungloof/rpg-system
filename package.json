@@ -1,6 +1,13 @@
 {
+  "name": "rpg-system",
+  "version": "1.0.0",
+  "description": "Sistema de RPG online",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
   "dependencies": {
-    "express": "^5.1.0",
-    "socket.io": "^4.8.1"
+    "express": "^4.18.2",
+    "socket.io": "^4.7.5"
   }
 }
