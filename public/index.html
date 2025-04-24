@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sacramento RPG - Ficha de Personagem</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js" onerror="console.error('Erro ao carregar React')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js" onerror="console.error('Erro ao carregar ReactDOM')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js" onerror="console.error('Erro ao carregar Babel')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js" onerror="console.error('Erro ao carregar Three.js')"></script>
+  <script src="https://cdn.tailwindcss.com" onerror="console.error('Erro ao carregar TailwindCSS')"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=MedievalSharp&display=swap');
+    body {
+      background-image: url('https://www.transparenttextures.com/patterns/paper-fibers.png');
+      background-color: #2a1e17;
+      font-family: 'MedievalSharp', cursive;
+    }
+    .character-sheet {
+      background-image: url('fundo.png');
+      background-size: cover;
+      background-position: center;
+      border: 6px solid #8B4513;
+      border-image: none;
+      padding: 30px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      color: #8b4513;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+      margin-bottom: 1rem;
+      border-bottom: 2px solid #5c4033;
+      padding-bottom: 0.25rem;
+      text-align: center;
+    }
+    .attribute-box, .antecedente-box, .action-box {
+      background: rgba(255, 245, 220, 0.9);
+      border: 2px solid #5c4033;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .attribute-box {
+      height: 110px;
+    }
+    .antecedente-box {
+      height: 96px;
+    }
+    .action-box {
+      height: 80px;
+    }
+    .antecedente-label {
+      font-size: 1.25rem;
+      font-weight: bold;
+      color: #5c4033;
+      text-transform: uppercase;
+    }
+    .dice-button {
+      font-size: 1.2rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: transform 0.1s;
+    }
+    .dice-button:hover {
+      transform: scale(1.1);
+    }
+    .input-field {
+      border: 2px solid #5c4033;
+      background: rgba(255, 245, 220, 0.5);
+      padding: 4px;
+      width: 60px;
+      text-align: center;
+      color: #5c4033;
+      border-radius: 4px;
+      font-family: 'MedievalSharp', cursive;
+      font-size: 1rem;
+    }
+    .circle-vida, .circle-dor {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 3px solid #5c4033;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      transition: background-color 0.3s;
+      cursor: pointer;
+    }
+    .circle-vida.active {
+      background-color: #ff4040;
+      color: white;
+    }
+    .circle-dor.active {
+      background-color: #4b0082;
+      color: white;
+    }
+    .dice-roll {
+      animation: spin 0.5s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #diceCanvas {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    }
+    .save-message {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      border-radius: 4px;
+      background-color: #4CAF50;
+      color: white;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.5s;
+      font-family: 'MedievalSharp', cursive;
+    }
+    .save-message.show {
+      opacity: 1;
+    }
+    .character-photo {
+      width: 120px;
+      height: 120px;
+      border: 4px solid #5c4033;
+      border-radius: 50%;
+      object-fit: cover;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+    }
+    textarea, input[type="text"] {
+      font-family: 'MedievalSharp', cursive;
+      color: #5c4033;
+      background: rgba(255, 245, 220, 0.5);
+      border: 2px solid #5c4033;
+      border-radius: 4px;
+      white-space: pre-wrap;
+    }
+    @media (max-width: 768px) {
+      .character-sheet {
+        padding: 15px;
+      }
+      .flex-wrap {
+        flex-direction: column;
+      }
+      .w-1/2 {
+        width: 100%;
+      }
+      .grid-cols-2 {
+        grid-template-columns: 1fr;
+      }
+      .input-field {
+        width: 50px;
+      }
+      .dice-button {
+        padding: 2px 6px;
+        font-size: 1rem;
+      }
+      .character-photo {
+        width: 100px;
+        height: 100px;
+      }
+      .attribute-box, .antecedente-box, .action-box {
+        height: auto;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+  <div id="root"></div>
+  <canvas id="diceCanvas" style="display: none;"></canvas>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const CharacterSheet = () => {
+      const [character, setCharacter] = useState({
+        id: null,
+        name: '',
+        photo: null,
+        fisico: 0,
+        velocidade: 0,
+        intelecto: 0,
+        coragem: 0,
+        antecedentes: {
+          Atencao: 0, Roubo: 0, Medicina: 0, Suor: 0,
+          Montaria: 0, Tradicao: 0, Negocios: 0, Violencia: 0
+        },
+        acoesMovimento: 0,
+        acoesCombate: 0,
+        habilidades: '',
+        vida: 0,
+        dor: 0,
+        maxDor: 6,
+        maxVida: 20
+      });
+      const [rollResults, setRollResults] = useState({
+        fisico: null,
+        velocidade: null,
+        intelecto: null,
+        coragem: null,
+        Atencao: null,
+        Roubo: null,
+        Medicina: null,
+        Suor: null,
+        Montaria: null,
+        Tradicao: null,
+        Negocios: null,
+        Violencia: null,
+        general: null
+      });
+      const [rolling, setRolling] = useState(false);
+      const [saveMessage, setSaveMessage] = useState('');
+      const canvasRef = useRef(null);
+      const rollSoundRef = useRef(null);
+      const socket = io('http://localhost:3000');
+
+      useEffect(() => {
+        try {
+          const audio = new Audio('dice-roll.mp3');
+          audio.load();
+          audio.addEventListener('error', (e) => {
+            console.error('Erro ao carregar o áudio:', e);
+            setSaveMessage('Erro ao carregar o áudio: arquivo não encontrado ou formato inválido.');
+            setTimeout(() => setSaveMessage(''), 3000);
+          });
+          rollSoundRef.current = audio;
+        } catch (err) {
+          console.error('Erro ao inicializar o áudio:', err);
+          setSaveMessage('Erro ao inicializar o áudio do dado.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+
+        const savedCharacter = localStorage.getItem('character');
+        let initialCharacter = {
+          id: null,
+          name: '',
+          photo: null,
+          fisico: 0,
+          velocidade: 0,
+          intelecto: 0,
+          coragem: 0,
+          antecedentes: {
+            Atencao: 0, Roubo: 0, Medicina: 0, Suor: 0,
+            Montaria: 0, Tradicao: 0, Negocios: 0, Violencia: 0
+          },
+          acoesMovimento: 0,
+          acoesCombate: 0,
+          habilidades: '',
+          vida: 0,
+          dor: 0,
+          maxDor: 6,
+          maxVida: 20
+        };
+
+        if (savedCharacter) {
+          try {
+            const parsed = JSON.parse(savedCharacter);
+            if (Array.isArray(parsed.habilidades)) {
+              parsed.habilidades = parsed.habilidades.join('\n');
+            }
+            initialCharacter = parsed;
+            setSaveMessage('Personagem carregado do localStorage!');
+            setTimeout(() => setSaveMessage(''), 3000);
+          } catch (err) {
+            console.error('Erro ao carregar personagem do localStorage:', err);
+            setSaveMessage('Erro ao carregar personagem do localStorage.');
+            setTimeout(() => setSaveMessage(''), 3000);
+          }
+        }
+
+        setCharacter(initialCharacter);
+
+        socket.emit('joinAsPlayer');
+
+        socket.on('connect', () => {
+          console.log('Conectado ao servidor como jogador:', socket.id);
+          if (initialCharacter.id && initialCharacter.name) {
+            socket.emit('updateCharacter', initialCharacter);
+          }
+        });
+
+        socket.on('updateCharacters', (updatedCharacters) => {
+          console.log('Recebido updateCharacters:', updatedCharacters);
+          const myCharacter = updatedCharacters.find(char => char.id === character.id);
+          if (myCharacter) {
+            setCharacter(myCharacter);
+            localStorage.setItem('character', JSON.stringify(myCharacter));
+          } else {
+            clearCharacter(true);
+          }
+        });
+
+        return () => {
+          socket.disconnect();
+        };
+      }, []);
+
+      useEffect(() => {
+        if (!character.id) {
+          const newId = Math.random().toString(36).substr(2, 9);
+          setCharacter((prev) => ({ ...prev, id: newId }));
+        }
+      }, [character.id]);
+
+      const saveCharacter = () => {
+        if (!character.id || !character.name) {
+          setSaveMessage('Adicione um nome ao personagem antes de salvar!');
+          setTimeout(() => setSaveMessage(''), 3000);
+          return;
+        }
+        try {
+          localStorage.setItem('character', JSON.stringify(character));
+          console.log('Enviando updateCharacter para o servidor:', character); // Log adicionado
+          socket.emit('updateCharacter', character);
+          setSaveMessage('Personagem salvo com sucesso!');
+          setTimeout(() => setSaveMessage(''), 3000);
+        } catch (err) {
+          console.error('Erro ao salvar no localStorage:', err);
+          setSaveMessage('Erro ao salvar no localStorage.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+      };
+
+      const exportCharacter = () => {
+        if (!character.id || !character.name) {
+          setSaveMessage('Adicione um nome ao personagem antes de exportar!');
+          setTimeout(() => setSaveMessage(''), 3000);
+          return;
+        }
+        try {
+          const characterData = JSON.stringify(character, null, 2);
+          const blob = new Blob([characterData], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${character.name}_ficha.json`;
+          link.click();
+          URL.revokeObjectURL(url);
+          setSaveMessage('Ficha exportada com sucesso!');
+          setTimeout(() => setSaveMessage(''), 3000);
+        } catch (err) {
+          console.error('Erro ao exportar a ficha:', err);
+          setSaveMessage('Erro ao exportar a ficha.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+      };
+
+      const importCharacter = (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+          setSaveMessage('Nenhum arquivo selecionado!');
+          setTimeout(() => setSaveMessage(''), 3000);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            if (!event.target.result) {
+              throw new Error('Arquivo vazio ou não pôde ser lido.');
+            }
+
+            const importedCharacter = JSON.parse(event.target.result);
+            console.log('Personagem importado:', importedCharacter);
+
+            if (!importedCharacter.id || !importedCharacter.name) {
+              setSaveMessage('Arquivo inválido: falta ID ou nome!');
+              setTimeout(() => setSaveMessage(''), 3000);
+              return;
+            }
+
+            if (Array.isArray(importedCharacter.habilidades)) {
+              importedCharacter.habilidades = importedCharacter.habilidades.join('\n');
+            }
+
+            const defaultCharacter = {
+              id: null,
+              name: '',
+              photo: null,
+              fisico: 0,
+              velocidade: 0,
+              intelecto: 0,
+              coragem: 0,
+              antecedentes: {
+                Atencao: 0, Roubo: 0, Medicina: 0, Suor: 0,
+                Montaria: 0, Tradicao: 0, Negocios: 0, Violencia: 0
+              },
+              acoesMovimento: 0,
+              acoesCombate: 0,
+              habilidades: '',
+              vida: 0,
+              dor: 0,
+              maxDor: 6,
+              maxVida: 20
+            };
+
+            const mergedCharacter = { ...defaultCharacter, ...importedCharacter };
+            mergedCharacter.antecedentes = {
+              ...defaultCharacter.antecedentes,
+              ...importedCharacter.antecedentes
+            };
+
+            setCharacter(mergedCharacter);
+            socket.emit('updateCharacter', mergedCharacter);
+            localStorage.setItem('character', JSON.stringify(mergedCharacter));
+            setSaveMessage('Ficha importada com sucesso!');
+            setTimeout(() => setSaveMessage(''), 3000);
+          } catch (err) {
+            console.error('Erro ao importar personagem:', err);
+            setSaveMessage('Erro ao importar: arquivo inválido ou corrompido!');
+            setTimeout(() => setSaveMessage(''), 3000);
+          }
+        };
+        reader.onerror = (err) => {
+          console.error('Erro ao ler o arquivo:', err);
+          setSaveMessage('Erro ao ler o arquivo!');
+          setTimeout(() => setSaveMessage(''), 3000);
+        };
+        reader.readAsText(file);
+      };
+
+      const animateDice = (callback) => {
+        try {
+          const canvas = document.getElementById('diceCanvas');
+          canvas.style.display = 'block';
+          const scene = new THREE.Scene();
+          const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+          const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+          renderer.setSize(300, 300);
+
+          const geometry = new THREE.BoxGeometry(1, 1, 1);
+          const materials = [
+            new THREE.MeshBasicMaterial({ color: 0xff0000 }),
+            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+            new THREE.MeshBasicMaterial({ color: 0x0000ff }),
+            new THREE.MeshBasicMaterial({ color: 0xffff00 }),
+            new THREE.MeshBasicMaterial({ color: 0xff00ff }),
+            new THREE.MeshBasicMaterial({ color: 0x00ffff })
+          ];
+          const cube = new THREE.Mesh(geometry, materials);
+          scene.add(cube);
+
+          camera.position.z = 5;
+
+          let rotationSpeedX = 0.1;
+          let rotationSpeedY = 0.1;
+          let time = 0;
+          const maxTime = 3;
+
+          const animate = () => {
+            cube.rotation.x += rotationSpeedX;
+            cube.rotation.y += rotationSpeedY;
+            time += 0.016;
+
+            if (time > 1.5) {
+              rotationSpeedX *= 0.85;
+              rotationSpeedY *= 0.85;
+            }
+
+            if (time > maxTime) {
+              canvas.style.display = 'none';
+              renderer.dispose();
+              callback();
+              return;
+            }
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+          };
+
+          if (rollSoundRef.current) {
+            rollSoundRef.current.play().catch(err => {
+              console.error('Erro ao reproduzir som:', err);
+              setSaveMessage('Erro ao reproduzir som do dado.');
+              setTimeout(() => setSaveMessage(''), 3000);
+            });
+          }
+          animate();
+        } catch (err) {
+          console.error('Erro na animação do dado:', err);
+          setSaveMessage('Erro na animação do dado.');
+          setTimeout(() => setSaveMessage(''), 3000);
+          callback();
+        }
+      };
+
+      const rollDice = (type, modifier = 0, key) => {
+        setRolling(true);
+        animateDice(() => {
+          try {
+            let result;
+            let diceValue;
+            if (type === 'd6') {
+              diceValue = Math.floor(Math.random() * 6) + 1;
+              result = diceValue + modifier;
+            }
+            const rollData = { result, diceValue, modifier, key };
+            setRollResults((prev) => ({
+              ...prev,
+              [key]: rollData
+            }));
+            socket.emit('playerRoll', {
+              playerId: character.id,
+              playerName: character.name,
+              roll: rollData
+            });
+            setRolling(false);
+          } catch (err) {
+            console.error('Erro ao rolar o dado:', err);
+            setSaveMessage('Erro ao rolar o dado.');
+            setTimeout(() => setSaveMessage(''), 3000);
+            setRolling(false);
+          }
+        });
+      };
+
+      const updateCharacter = (field, value) => {
+        try {
+          const parsedValue = parseInt(value) || 0;
+          if (parsedValue < 0) return;
+          const newCharacter = { ...character, [field]: parsedValue };
+          if (field === 'fisico') {
+            newCharacter.vida = Math.min(newCharacter.vida, parsedValue);
+            newCharacter.maxVida = Math.min(20, parsedValue);
+          }
+          setCharacter(newCharacter);
+          socket.emit('updateCharacter', newCharacter);
+        } catch (err) {
+          console.error('Erro ao atualizar personagem:', err);
+          setSaveMessage('Erro ao atualizar personagem.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+      };
+
+      const updateHabilidades = (e) => {
+        try {
+          const text = e.target.value;
+          const lines = text.split('\n').slice(0, 12).join('\n');
+          const newCharacter = { ...character, habilidades: lines };
+          setCharacter(newCharacter);
+          socket.emit('updateCharacter', newCharacter);
+        } catch (err) {
+          console.error('Erro ao atualizar habilidades:', err);
+          setSaveMessage('Erro ao atualizar habilidades.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+      };
+
+      const toggleDor = (index) => {
+        try {
+          const newDor = character.dor === index + 1 ? index : index + 1;
+          let newCharacter;
+          if (newDor === 6 && character.dor < 6) {
+            const newVida = Math.max(0, character.vida - 1);
+            newCharacter = { ...character, vida: newVida, dor: 0 };
+          } else {
+            newCharacter = { ...character, dor: newDor };
+          }
+          setCharacter(newCharacter);
+          socket.emit('updateCharacter', newCharacter);
+        } catch (err) {
+          console.error('Erro ao alternar dor:', err);
+          setSaveMessage('Erro ao alternar dor.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+      };
+
+      const toggleVida = (index) => {
+        try {
+          const newVida = character.vida === index + 1 ? index : index + 1;
+          const newCharacter = { ...character, vida: newVida };
+          setCharacter(newCharacter);
+          socket.emit('updateCharacter', newCharacter);
+        } catch (err) {
+          console.error('Erro ao alternar vida:', err);
+          setSaveMessage('Erro ao alternar vida.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+      };
+
+      const handleFileChange = (e) => {
+        try {
+          const file = e.target.files[0];
+          if (file && file.size <= 2 * 1024 * 1024) {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const newCharacter = { ...character, photo: reader.result };
+              setCharacter(newCharacter);
+              socket.emit('updateCharacter', newCharacter);
+            };
+            reader.readAsDataURL(file);
+          } else {
+            alert('Imagem muito grande! Máximo 2MB.');
+          }
+        } catch (err) {
+          console.error('Erro ao carregar imagem:', err);
+          setSaveMessage('Erro ao carregar imagem.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+      };
+
+      const clearCharacter = (fromServer = false) => {
+        try {
+          localStorage.removeItem('character');
+          const newId = Math.random().toString(36).substr(2, 9);
+          const newCharacter = {
+            id: newId,
+            name: '',
+            photo: null,
+            fisico: 0,
+            velocidade: 0,
+            intelecto: 0,
+            coragem: 0,
+            antecedentes: {
+              Atencao: 0, Roubo: 0, Medicina: 0, Suor: 0,
+              Montaria: 0, Tradicao: 0, Negocios: 0, Violencia: 0
+            },
+            acoesMovimento: 0,
+            acoesCombate: 0,
+            habilidades: '',
+            vida: 0,
+            dor: 0,
+            maxDor: 6,
+            maxVida: 20
+          };
+          setCharacter(newCharacter);
+          if (!fromServer) {
+            socket.emit('updateCharacter', newCharacter);
+          }
+          setRollResults({
+            fisico: null,
+            velocidade: null,
+            intelecto: null,
+            coragem: null,
+            Atencao: null,
+            Roubo: null,
+            Medicina: null,
+            Suor: null,
+            Montaria: null,
+            Tradicao: null,
+            Negocios: null,
+            Violencia: null,
+            general: null
+          });
+          setSaveMessage('Ficha limpa!');
+          setTimeout(() => setSaveMessage(''), 3000);
+        } catch (err) {
+          console.error('Erro ao limpar ficha:', err);
+          setSaveMessage('Erro ao limpar ficha.');
+          setTimeout(() => setSaveMessage(''), 3000);
+        }
+      };
+
+      return (
+        <div className="w-full relative">
+          {saveMessage && (
+            <div className="save-message show">
+              {saveMessage}
+            </div>
+          )}
+
+          <div className="character-sheet">
+            <div className="flex flex-col items-center mb-8 gap-4">
+              <h1 className="section-title">Ficha de Personagem</h1>
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col items-center">
+                  {character.photo ? (
+                    <img
+                      src={character.photo}
+                      alt="Personagem"
+                      className="character-photo"
+                    />
+                  ) : (
+                    <div className="character-photo bg-[#d2b48c] flex items-center justify-center">
+                      <span className="text-[#5c4033] text-sm">Sem Foto</span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="mt-2 text-sm text-[#5c4033]"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label className="text-lg font-bold text-[#5c4033] mb-1">Nome</label>
+                  <input
+                    type="text"
+                    value={character.name}
+                    onChange={(e) => {
+                      const newCharacter = { ...character, name: e.target.value.trim().slice(0, 50) };
+                      setCharacter(newCharacter);
+                      socket.emit('updateCharacter', newCharacter);
+                    }}
+                    className="w-64 p-2 bg-transparent border-2 border-[#5c4033] rounded text-lg text-[#5c4033]"
+                    placeholder="Digite o nome..."
+                    maxLength="50"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div>
+                <h2 className="section-title">Atributos</h2>
+                {['fisico', 'velocidade', 'intelecto', 'coragem'].map((attr) => (
+                  <div key={attr} className="attribute-box">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold uppercase text-[#5c4033]">{attr}</h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-[#5c4033]">1d6 +</span>
+                        <input
+                          type="number"
+                          value={character[attr]}
+                          onChange={(e) => updateCharacter(attr, e.target.value)}
+                          className="input-field"
+                          min="0"
+                          max={attr === 'fisico' ? "20" : "99"}
+                        />
+                        <button
+                          onClick={() => rollDice('d6', character[attr], attr)}
+                          className="bg-[#8b4513] hover:bg-[#5c4033] text-white dice-button disabled:opacity-50"
+                          disabled={rolling}
+                        >
+                          🎲
+                        </button>
+                      </div>
+                    </div>
+                    {rollResults[attr] && (
+                      <span className="text-sm text-[#5c4033]">
+                        {rollResults[attr].result} ({rollResults[attr].diceValue} + {rollResults[attr].modifier})
+                      </span>
+                    )}
+                    <p className="text-xs italic text-[#5c4033]">
+                      {attr === 'fisico' && '+1 💀 para cada ponto.'}
+                      {attr === 'velocidade' && '+1 Movimentação para cada ponto.'}
+                      {attr === 'intelecto' && '+1 Antecedente para cada ponto.'}
+                      {attr === 'coragem' && '+1 Ação de Combate para cada ponto.'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <h2 className="section-title">Antecedentes</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  {Object.keys(character.antecedentes).map((ant) => (
+                    <div key={ant} className="antecedente-box">
+                      <div className="flex items-center justify-between">
+                        <h3 className="antecedente-label">{ant}</h3>
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm font-bold text-[#5c4033]">1d6 +</span>
+                          <input
+                            type="number"
+                            value={character.antecedentes[ant]}
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value) || 0;
+                              if (value < 0) return;
+                              const newCharacter = {
+                                ...character,
+                                antecedentes: { ...character.antecedentes, [ant]: value }
+                              };
+                              setCharacter(newCharacter);
+                              socket.emit('updateCharacter', newCharacter);
+                            }}
+                            className="input-field"
+                            min="0"
+                            max="99"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => rollDice('d6', character.antecedentes[ant], ant)}
+                          className="bg-[#8b4513] hover:bg-[#5c4033] text-white dice-button disabled:opacity-50"
+                          disabled={rolling}
+                        >
+                          🎲
+                        </button>
+                        {rollResults[ant] && (
+                          <span className="text-sm text-[#5c4033]">
+                            {rollResults[ant].result} ({rollResults[ant].diceValue} + {rollResults[ant].modifier})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div>
+                <h2 className="section-title">Ações de Movimento</h2>
+                <div className="action-box">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold uppercase text-[#5c4033]">Movimento</h3>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={character.acoesMovimento}
+                        onChange={(e) => updateCharacter('acoesMovimento', e.target.value)}
+                        className="input-field"
+                        min="0"
+                        max="99"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs italic text-[#5c4033]">
+                    Quantidade de ações de movimento por turno.
+                  </p>
+                </div>
+              </div>
+              <div>
+                <h2 className="section-title">Ações de Combate</h2>
+                <div className="action-box">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold uppercase text-[#5c4033]">Combate</h3>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={character.acoesCombate}
+                        onChange={(e) => updateCharacter('acoesCombate', e.target.value)}
+                        className="input-field"
+                        min="0"
+                        max="99"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs italic text-[#5c4033]">
+                    Quantidade de ações de combate por turno.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h2 className="section-title">Habilidades</h2>
+              <textarea
+                value={character.habilidades}
+                onChange={updateHabilidades}
+                className="w-full h-32 p-2 bg-transparent border-2 border-[#5c4033] rounded text-[#5c4033]"
+                placeholder="Digite suas Habilidades (pressione Enter para nova linha)..."
+                maxLength="2000"
+                rows="6"
+                wrap="soft"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div>
+                <h3 className="section-title">Círculos de Dor</h3>
+                <div className="flex gap-2 flex-wrap justify-center">
+                  {[...Array(character.maxDor)].map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => toggleDor(i)}
+                      className={`circle-dor ${i < character.dor ? 'active' : ''}`}
+                    >
+                      {i < character.dor ? '👊' : '○'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3 className="section-title">Círculos de Vida</h3>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2 flex-wrap justify-center">
+                    {[...Array(10)].map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => toggleVida(i)}
+                        className={`circle-vida ${i < character.vida ? 'active' : ''}`}
+                      >
+                        {i < character.vida ? '💀' : '○'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 flex-wrap justify-center">
+                    {[...Array(10)].map((_, i) => {
+                      const index = i + 10;
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => toggleVida(index)}
+                          className={`circle-vida ${index < character.vida ? 'active' : ''}`}
+                        >
+                          {index < character.vida ? '💀' : '○'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#d2b48c] p-4 rounded border-2 border-[#5c4033] mt-8">
+              <h2 className="section-title">Rolagem de Dados</h2>
+              <div className="flex justify-center gap-4 mb-4">
+                <button
+                  onClick={() => rollDice('d6', 0, 'general')}
+                  className="bg-[#8b4513] hover:bg-[#5c4033] text-white p-2 rounded disabled:opacity-50 flex items-center gap-1"
+                  disabled={rolling}
+                >
+                  <span>🎲</span> Rolar d6
+                </button>
+              </div>
+              {rolling ? (
+                <div className="text-2xl flex items-center justify-center text-[#5c4033]">
+                  <span className="dice-roll inline-block mr-2">🎲</span>
+                  Rolando...
+                </div>
+              ) : rollResults.general && (
+                <div className="text-2xl text-[#5c4033] text-center">
+                  Resultado: {rollResults.general.result} ({rollResults.general.diceValue} + {rollResults.general.modifier})
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#d2b48c] p-4 rounded border-2 border-[#5c4033] mt-4">
+              <h2 className="section-title">Ações da Ficha</h2>
+              <div className="flex justify-center gap-4 flex-wrap">
+                <button
+                  onClick={saveCharacter}
+                  className="bg-[#4CAF50] hover:bg-[#388E3C] text-white p-2 rounded flex items-center gap-1"
+                >
+                  <span>💾</span> Salvar Ficha
+                </button>
+                <button
+                  onClick={exportCharacter}
+                  className="bg-[#4CAF50] hover:bg-[#388E3C] text-white p-2 rounded flex items-center gap-1"
+                >
+                  <span>📤</span> Exportar Ficha
+                </button>
+                <label className="bg-[#4CAF50] hover:bg-[#388E3C] text-white p-2 rounded flex items-center gap-1 cursor-pointer">
+                  <span>📥</span> Importar Ficha
+                  <input
+                    type="file"
+                    accept="application/json"
+                    onChange={importCharacter}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  onClick={() => clearCharacter(false)}
+                  className="bg-[#5c4033] hover:bg-[#8b4513] text-white p-2 rounded flex items-center gap-1"
+                >
+                  <span>🗑️</span> Limpar Ficha
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    try {
+      ReactDOM.render(<CharacterSheet />, document.getElementById('root'));
+    } catch (err) {
+      console.error('Erro ao renderizar o componente React:', err);
+      const root = document.getElementById('root');
+      root.innerHTML = '<div style="color: red; text-align: center;">Erro ao carregar a ficha. Verifique o console para mais detalhes.</div>';
+    }
+  </script>
+</body>
+</html>

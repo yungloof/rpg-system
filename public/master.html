@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sacramento RPG - Painel do Mestre</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js" onerror="console.error('Erro ao carregar React')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js" onerror="console.error('Erro ao carregar ReactDOM')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js" onerror="console.error('Erro ao carregar Babel')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js" onerror="console.error('Erro ao carregar Three.js')"></script>
+  <script src="https://cdn.tailwindcss.com" onerror="console.error('Erro ao carregar TailwindCSS')"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=MedievalSharp&display=swap');
+    body {
+      background-image: url('https://www.transparenttextures.com/patterns/paper-fibers.png');
+      background-color: #2a1e17;
+      font-family: 'MedievalSharp', cursive;
+    }
+    .master-panel {
+      background-image: url('fundo.png');
+      background-size: cover;
+      background-position: center;
+      border: 6px solid #8B4513;
+      border-image: none;
+      padding: 30px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      color: #8b4513;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+      margin-bottom: 1rem;
+      border-bottom: 2px solid #5c4033;
+      padding-bottom: 0.25rem;
+      text-align: center;
+    }
+    .character-box, .roll-box {
+      background: rgba(255, 245, 220, 0.9);
+      border: 2px solid #5c4033;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+    }
+    .character-photo {
+      width: 60px;
+      height: 60px;
+      border: 2px solid #5c4033;
+      border-radius: 50%;
+      object-fit: cover;
+      box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+    }
+    .dice-roll {
+      animation: spin 0.5s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #diceCanvas {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    }
+    .input-field {
+      border: 2px solid #5c4033;
+      background: rgba(255, 245, 220, 0.5);
+      padding: 4px;
+      width: 60px;
+      text-align: center;
+      color: #5c4033;
+      border-radius: 4px;
+      font-family: 'MedievalSharp', cursive;
+      font-size: 1rem;
+    }
+    textarea, input[type="text"] {
+      font-family: 'MedievalSharp', cursive;
+      color: #5c4033;
+      background: rgba(255, 245, 220, 0.5);
+      border: 2px solid #5c4033;
+      border-radius: 4px;
+      white-space: pre-wrap;
+    }
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      border-radius: 4px;
+      background-color: #4CAF50;
+      color: white;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.5s;
+      font-family: 'MedievalSharp', cursive;
+    }
+    .notification.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+  <div id="root"></div>
+  <canvas id="diceCanvas" style="display: none;"></canvas>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const MasterPanel = () => {
+      const [characters, setCharacters] = useState([]);
+      const [rolls, setRolls] = useState([]);
+      const [rolling, setRolling] = useState(false);
+      const [notification, setNotification] = useState('');
+      const canvasRef = useRef(null);
+      const rollSoundRef = useRef(null);
+      const socket = io('http://localhost:3000');
+
+      useEffect(() => {
+        try {
+          const audio = new Audio('dice-roll.mp3');
+          audio.load();
+          audio.addEventListener('error', (e) => {
+            console.error('Erro ao carregar o áudio:', e);
+            setNotification('Erro ao carregar o áudio: arquivo não encontrado ou formato inválido.');
+            setTimeout(() => setNotification(''), 3000);
+          });
+          rollSoundRef.current = audio;
+        } catch (err) {
+          console.error('Erro ao inicializar o áudio:', err);
+          setNotification('Erro ao inicializar o áudio do dado.');
+          setTimeout(() => setNotification(''), 3000);
+        }
+
+        socket.emit('joinAsMaster');
+
+        socket.on('connect', () => {
+          console.log('Conectado ao servidor como mestre:', socket.id);
+        });
+
+        socket.on('updateCharacters', (updatedCharacters) => {
+          console.log('Recebido updateCharacters:', updatedCharacters);
+          setCharacters(updatedCharacters);
+        });
+
+        socket.on('playerRoll', (data) => {
+          console.log('Recebido playerRoll:', data);
+          setRolls((prev) => [...prev, data].slice(-10)); // Mantém apenas as últimas 10 rolagens
+        });
+
+        return () => {
+          socket.disconnect();
+        };
+      }, []);
+
+      const animateDice = (callback) => {
+        try {
+          const canvas = document.getElementById('diceCanvas');
+          canvas.style.display = 'block';
+          const scene = new THREE.Scene();
+          const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+          const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+          renderer.setSize(300, 300);
+
+          const geometry = new THREE.BoxGeometry(1, 1, 1);
+          const materials = [
+            new THREE.MeshBasicMaterial({ color: 0xff0000 }),
+            new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+            new THREE.MeshBasicMaterial({ color: 0x0000ff }),
+            new THREE.MeshBasicMaterial({ color: 0xffff00 }),
+            new THREE.MeshBasicMaterial({ color: 0xff00ff }),
+            new THREE.MeshBasicMaterial({ color: 0x00ffff })
+          ];
+          const cube = new THREE.Mesh(geometry, materials);
+          scene.add(cube);
+
+          camera.position.z = 5;
+
+          let rotationSpeedX = 0.1;
+          let rotationSpeedY = 0.1;
+          let time = 0;
+          const maxTime = 3;
+
+          const animate = () => {
+            cube.rotation.x += rotationSpeedX;
+            cube.rotation.y += rotationSpeedY;
+            time += 0.016;
+
+            if (time > 1.5) {
+              rotationSpeedX *= 0.85;
+              rotationSpeedY *= 0.85;
+            }
+
+            if (time > maxTime) {
+              canvas.style.display = 'none';
+              renderer.dispose();
+              callback();
+              return;
+            }
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+          };
+
+          if (rollSoundRef.current) {
+            rollSoundRef.current.play().catch(err => {
+              console.error('Erro ao reproduzir som:', err);
+              setNotification('Erro ao reproduzir som do dado.');
+              setTimeout(() => setNotification(''), 3000);
+            });
+          }
+          animate();
+        } catch (err) {
+          console.error('Erro na animação do dado:', err);
+          setNotification('Erro na animação do dado.');
+          setTimeout(() => setNotification(''), 3000);
+          callback();
+        }
+      };
+
+      const rollDice = () => {
+        setRolling(true);
+        animateDice(() => {
+          try {
+            const diceValue = Math.floor(Math.random() * 6) + 1;
+            setRolls((prev) => [...prev, {
+              playerName: 'Mestre',
+              roll: { result: diceValue, diceValue, modifier: 0, key: 'general' }
+            }].slice(-10));
+            setRolling(false);
+          } catch (err) {
+            console.error('Erro ao rolar o dado:', err);
+            setNotification('Erro ao rolar o dado.');
+            setTimeout(() => setNotification(''), 3000);
+            setRolling(false);
+          }
+        });
+      };
+
+      const updateCharacter = (index, field, value) => {
+        try {
+          const parsedValue = parseInt(value) || 0;
+          if (parsedValue < 0) return;
+          const updatedCharacters = [...characters];
+          updatedCharacters[index] = { ...updatedCharacters[index], [field]: parsedValue };
+          if (field === 'fisico') {
+            updatedCharacters[index].vida = Math.min(updatedCharacters[index].vida, parsedValue);
+            updatedCharacters[index].maxVida = Math.min(20, parsedValue);
+          }
+          setCharacters(updatedCharacters);
+          socket.emit('updateCharacters', updatedCharacters);
+        } catch (err) {
+          console.error('Erro ao atualizar personagem:', err);
+          setNotification('Erro ao atualizar personagem.');
+          setTimeout(() => setNotification(''), 3000);
+        }
+      };
+
+      const updateCharacterField = (index, field, value) => {
+        try {
+          const updatedCharacters = [...characters];
+          updatedCharacters[index] = { ...updatedCharacters[index], [field]: value };
+          setCharacters(updatedCharacters);
+          socket.emit('updateCharacters', updatedCharacters);
+        } catch (err) {
+          console.error('Erro ao atualizar campo do personagem:', err);
+          setNotification('Erro ao atualizar campo do personagem.');
+          setTimeout(() => setNotification(''), 3000);
+        }
+      };
+
+      const updateAntecedente = (index, ant, value) => {
+        try {
+          const parsedValue = parseInt(value) || 0;
+          if (parsedValue < 0) return;
+          const updatedCharacters = [...characters];
+          updatedCharacters[index].antecedentes = {
+            ...updatedCharacters[index].antecedentes,
+            [ant]: parsedValue
+          };
+          setCharacters(updatedCharacters);
+          socket.emit('updateCharacters', updatedCharacters);
+        } catch (err) {
+          console.error('Erro ao atualizar antecedente:', err);
+          setNotification('Erro ao atualizar antecedente.');
+          setTimeout(() => setNotification(''), 3000);
+        }
+      };
+
+      const clearCharacters = () => {
+        try {
+          socket.emit('clearCharacters');
+          setNotification('Todos os personagens foram limpos!');
+          setTimeout(() => setNotification(''), 3000);
+        } catch (err) {
+          console.error('Erro ao limpar personagens:', err);
+          setNotification('Erro ao limpar personagens.');
+          setTimeout(() => setNotification(''), 3000);
+        }
+      };
+
+      return (
+        <div className="w-full relative">
+          {notification && (
+            <div className="notification show">
+              {notification}
+            </div>
+          )}
+
+          <div className="master-panel">
+            <h1 className="section-title">Painel do Mestre</h1>
+
+            <div className="mb-8">
+              <h2 className="section-title">Personagens</h2>
+              {characters.length === 0 ? (
+                <div className="text-center text-[#5c4033] italic">
+                  Nenhum personagem registrado.
+                </div>
+              ) : (
+                characters.map((char, index) => (
+                  <div key={char.id} className="character-box">
+                    <div className="flex items-center gap-4 mb-2">
+                      {char.photo ? (
+                        <img src={char.photo} alt={char.name} className="character-photo" />
+                      ) : (
+                        <div className="character-photo bg-[#d2b48c] flex items-center justify-center">
+                          <span className="text-[#5c4033] text-xs">Sem Foto</span>
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={char.name}
+                          onChange={(e) => updateCharacterField(index, 'name', e.target.value.trim().slice(0, 50))}
+                          className="w-full p-2 bg-transparent border-2 border-[#5c4033] rounded text-lg text-[#5c4033]"
+                          placeholder="Nome do personagem..."
+                          maxLength="50"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <h3 className="text-lg font-bold uppercase text-[#5c4033] mb-2">Atributos</h3>
+                        {['fisico', 'velocidade', 'intelecto', 'coragem'].map((attr) => (
+                          <div key={attr} className="flex items-center justify-between mb-2">
+                            <span className="text-[#5c4033] capitalize">{attr}</span>
+                            <input
+                              type="number"
+                              value={char[attr]}
+                              onChange={(e) => updateCharacter(index, attr, e.target.value)}
+                              className="input-field"
+                              min="0"
+                              max={attr === 'fisico' ? "20" : "99"}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold uppercase text-[#5c4033] mb-2">Antecedentes</h3>
+                        {Object.keys(char.antecedentes).map((ant) => (
+                          <div key={ant} className="flex items-center justify-between mb-2">
+                            <span className="text-[#5c4033] capitalize">{ant}</span>
+                            <input
+                              type="number"
+                              value={char.antecedentes[ant]}
+                              onChange={(e) => updateAntecedente(index, ant, e.target.value)}
+                              className="input-field"
+                              min="0"
+                              max="99"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div>
+                        <h3 className="text-lg font-bold uppercase text-[#5c4033] mb-2">Ações de Movimento</h3>
+                        <input
+                          type="number"
+                          value={char.acoesMovimento}
+                          onChange={(e) => updateCharacter(index, 'acoesMovimento', e.target.value)}
+                          className="input-field"
+                          min="0"
+                          max="99"
+                        />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold uppercase text-[#5c4033] mb-2">Ações de Combate</h3>
+                        <input
+                          type="number"
+                          value={char.acoesCombate}
+                          onChange={(e) => updateCharacter(index, 'acoesCombate', e.target.value)}
+                          className="input-field"
+                          min="0"
+                          max="99"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <h3 className="text-lg font-bold uppercase text-[#5c4033] mb-2">Habilidades</h3>
+                      <textarea
+                        value={char.habilidades}
+                        onChange={(e) => updateCharacterField(index, 'habilidades', e.target.value)}
+                        className="w-full h-24 p-2 bg-transparent border-2 border-[#5c4033] rounded text-[#5c4033]"
+                        maxLength="2000"
+                        rows="4"
+                        wrap="soft"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div>
+                        <h3 className="text-lg font-bold uppercase text-[#5c4033] mb-2">Vida</h3>
+                        <input
+                          type="number"
+                          value={char.vida}
+                          onChange={(e) => updateCharacter(index, 'vida', e.target.value)}
+                          className="input-field"
+                          min="0"
+                          max={char.maxVida}
+                        />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold uppercase text-[#5c4033] mb-2">Dor</h3>
+                        <input
+                          type="number"
+                          value={char.dor}
+                          onChange={(e) => updateCharacter(index, 'dor', e.target.value)}
+                          className="input-field"
+                          min="0"
+                          max={char.maxDor}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div className="flex justify-center mt-4">
+                <button
+                  onClick={clearCharacters}
+                  className="bg-[#5c4033] hover:bg-[#8b4513] text-white p-2 rounded flex items-center gap-1"
+                >
+                  <span>🗑️</span> Limpar Todos os Personagens
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#d2b48c] p-4 rounded border-2 border-[#5c4033] mb-8">
+              <h2 className="section-title">Rolagens dos Jogadores</h2>
+              {rolls.length === 0 ? (
+                <div className="text-center text-[#5c4033] italic">
+                  Nenhuma rolagem realizada.
+                </div>
+              ) : (
+                rolls.map((roll, index) => (
+                  <div key={index} className="roll-box">
+                    <span className="text-[#5c4033]">
+                      {roll.playerName} rolou {roll.roll.key}: {roll.roll.result} ({roll.roll.diceValue} + {roll.roll.modifier})
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="bg-[#d2b48c] p-4 rounded border-2 border-[#5c4033]">
+              <h2 className="section-title">Rolagem do Mestre</h2>
+              <div className="flex justify-center gap-4 mb-4">
+                <button
+                  onClick={rollDice}
+                  className="bg-[#8b4513] hover:bg-[#5c4033] text-white p-2 rounded disabled:opacity-50 flex items-center gap-1"
+                  disabled={rolling}
+                >
+                  <span>🎲</span> Rolar d6
+                </button>
+              </div>
+              {rolling && (
+                <div className="text-2xl flex items-center justify-center text-[#5c4033]">
+                  <span className="dice-roll inline-block mr-2">🎲</span>
+                  Rolando...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    try {
+      ReactDOM.render(<MasterPanel />, document.getElementById('root'));
+    } catch (err) {
+      console.error('Erro ao renderizar o componente React:', err);
+      const root = document.getElementById('root');
+      root.innerHTML = '<div style="color: red; text-align: center;">Erro ao carregar o painel do mestre. Verifique o console para mais detalhes.</div>';
+    }
+  </script>
+</body>
+</html>
